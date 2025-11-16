@@ -1,16 +1,19 @@
 workflows:
-  build-ipa:
-    name: Build Unsigned IPA
-    max_build_duration: 30
+  ios-workflow:
+    name: Build iOS IPA
     environment:
       xcode: latest
-      vars:
-        XCODE_SCHEME: "PokeWalker"
     scripts:
-      - name: Build unsigned IPA
+      - name: Install dependencies
+        script: |
+          cd PokeWalker
+          # If no CocoaPods, skip this
+          pod install || true
+      - name: Build IPA
         script: |
           xcode-project build-ipa \
-            --scheme "$XCODE_SCHEME" \
-            --skip-codesign
+            --project "PokeWalker.xcodeproj" \
+            --scheme "PokeWalker" \
+            --export-method development
     artifacts:
       - build/ios/ipa/*.ipa
