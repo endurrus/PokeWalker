@@ -1,4 +1,4 @@
-name: Build iOS IPA
+name: Build Unsigned iOS IPA
 
 on:
   workflow_dispatch:
@@ -27,27 +27,23 @@ jobs:
       - name: Ensure Xcode scheme is shared
         run: |
           mkdir -p "${{ steps.proj.outputs.project }}/xcshareddata/xcschemes"
-          # Find any local scheme (inside xcuserdata)
           scheme_file=$(find "${{ steps.proj.outputs.project }}" -path "*/xcuserdata/*/xcschemes/*.xcscheme" | head -1)
           if [ -n "$scheme_file" ]; then
-            echo "Found scheme at: $scheme_file"
             cp "$scheme_file" "${{ steps.proj.outputs.project }}/xcshareddata/xcschemes/"
-          else
-            echo "No user scheme found — assuming it is already shared."
           fi
           ls "${{ steps.proj.outputs.project }}/xcshareddata/xcschemes"
 
-      - name: Build archive
+      - name: Build archive (Unsigned)
         run: |
           xcodebuild archive \
             -project "${{ steps.proj.outputs.project }}" \
             -scheme PokeWalker \
             -archivePath build/PokeWalker.xcarchive \
-            CODE_SIGN_STYLE=Automatic \
-            CODE_SIGN_IDENTITY="" \
-            PROVISIONING_PROFILE_SPECIFIER=""
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="" \
+            CODE_SIGN_IDENTITY=""
 
-      - name: Create ExportOptions.plist
+      - name: Create ExportOptions.plist (Unsigned)
         run: |
           cat > ExportOptions.plist <<'EOF'
           <?xml version="1.0" encoding="UTF-8"?>
@@ -57,16 +53,18 @@ jobs:
               <key>method</key>
               <string>development</string>
               <key>signingStyle</key>
-              <string>automatic</string>
+              <string>manual</string>
               <key>compileBitcode</key>
               <false/>
               <key>stripSwiftSymbols</key>
               <true/>
+              <key>signingCertificate</key>
+              <string></string>
           </dict>
           </plist>
           EOF
 
-      - name: Export IPA
+      - name: Export unsigned IPA
         run: |
           xcodebuild -exportArchive \
             -archivePath build/PokeWalker.xcarchive \
@@ -76,5 +74,5 @@ jobs:
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PokeWalker-IPA
+          name: PokeWalker-Unsigned-IPA
           path: build/export/*.ipa
