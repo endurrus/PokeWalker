@@ -1,0 +1,15 @@
+workflows:
+  ios:
+    environment:
+      xcode: latest
+      vars:
+        XCODE_PROJECT: "PokeWalker.xcodeproj"
+        XCODE_SCHEME: "PokeWalker"
+
+    scripts:
+      - xcode-project build-ipa \
+          --project "$XCODE_PROJECT" \
+          --scheme "$XCODE_SCHEME"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
