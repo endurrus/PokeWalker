@@ -1,19 +1,19 @@
-name: Build IPA
+name: Build iOS IPA
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Clean up macOS metadata files
+      - name: Cleanup macOS metadata files
         run: |
           find . -name "._*" -delete
 
@@ -22,32 +22,52 @@ jobs:
         run: |
           proj=$(find . -maxdepth 2 -name "*.xcodeproj" | grep -v "._")
           echo "project=$proj" >> $GITHUB_OUTPUT
+          echo "Detected Xcode project: $proj"
 
-      - name: Ensure scheme is shared
+      - name: Ensure Xcode scheme is shared
         run: |
-          mkdir -p ${{ steps.proj.outputs.project }}/xcshareddata/xcschemes
-          find ${{ steps.proj.outputs.project }} -name "*.xcscheme"
-          cp $(find ${{ steps.proj.outputs.project }} -path "*/xcuserdata/*/xcschemes/*.xcscheme" | head -1) \
-             ${{ steps.proj.outputs.project }}/xcshareddata/xcschemes/ || true
+          mkdir -p "${{ steps.proj.outputs.project }}/xcshareddata/xcschemes"
+          # Find any local scheme (inside xcuserdata)
+          scheme_file=$(find "${{ steps.proj.outputs.project }}" -path "*/xcuserdata/*/xcschemes/*.xcscheme" | head -1)
+          if [ -n "$scheme_file" ]; then
+            echo "Found scheme at: $scheme_file"
+            cp "$scheme_file" "${{ steps.proj.outputs.project }}/xcshareddata/xcschemes/"
+          else
+            echo "No user scheme found — assuming it is already shared."
+          fi
+          ls "${{ steps.proj.outputs.project }}/xcshareddata/xcschemes"
 
       - name: Build archive
         run: |
           xcodebuild archive \
-            -project ${{ steps.proj.outputs.project }} \
+            -project "${{ steps.proj.outputs.project }}" \
             -scheme PokeWalker \
             -archivePath build/PokeWalker.xcarchive \
-            CODE_SIGN_STYLE=automatic \
+            CODE_SIGN_STYLE=Automatic \
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE_SPECIFIER=""
 
+      - name: Create ExportOptions.plist
+        run: |
+          cat > ExportOptions.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>development</string>
+              <key>signingStyle</key>
+              <string>automatic</string>
+              <key>compileBitcode</key>
+              <false/>
+              <key>stripSwiftSymbols</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
+
       - name: Export IPA
         run: |
-          cat <<EOF > ExportOptions.plist
-          {
-            "method": "development",
-            "signingStyle": "automatic"
-          }
-          EOF
           xcodebuild -exportArchive \
             -archivePath build/PokeWalker.xcarchive \
             -exportPath build/export \
