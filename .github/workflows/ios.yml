@@ -1,4 +1,4 @@
-name: Build PokeWalker iOS IPA
+name: Build PokeWalker IPA
 
 on:
   workflow_dispatch:
@@ -8,16 +8,16 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode
+      - name: Select Xcode version
         run: sudo xcode-select -switch /Applications/Xcode.app
 
-      - name: Build and archive
+      - name: Build archive (no signing)
         run: |
           xcodebuild \
             -project PokeWalker.xcodeproj \
@@ -25,26 +25,29 @@ jobs:
             -configuration Release \
             -archivePath $PWD/build/PokeWalker.xcarchive \
             clean archive \
-            SKIP_INSTALL=NO \
-            BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
-            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY="" \
-            DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }}
+            CODE_SIGNING_REQUIRED=NO \
+            SKIP_INSTALL=NO
 
-      - name: Create ExportOptions.plist
+      - name: Create correct ExportOptions.plist (XML)
         run: |
           cat <<EOF > ExportOptions.plist
-          {
-            "method": "development",
-            "signingStyle": "automatic",
-            "teamID": "${{ secrets.APPLE_TEAM_ID }}",
-            "compileBitcode": false,
-            "stripSwiftSymbols": true,
-            "destination": "export"
-          }
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>compileBitcode</key><false/>
+            <key>destination</key><string>export</string>
+            <key>method</key><string>development</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>stripSwiftSymbols</key><true/>
+          </dict>
+          </plist>
           EOF
 
-      - name: Export IPA
+      - name: Export IPA (no signing)
         run: |
           xcodebuild \
             -exportArchive \
@@ -52,12 +55,12 @@ jobs:
             -exportPath build/export \
             -exportOptionsPlist ExportOptions.plist
 
-      - name: Zip IPA
+      - name: Zip the IPA
         run: |
           cd build/export
           zip -r PokeWalker.zip .
 
-      - name: Upload IPA artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: PokeWalker-IPA
