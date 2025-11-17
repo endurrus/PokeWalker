@@ -1,9 +1,10 @@
-name: Build Xcode Archive for Sideload
+name: Build PokeWalker iOS IPA
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   build:
@@ -11,40 +12,50 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
-      - name: Cleanup macOS metadata files
-        run: |
-          find . -name "._*" -delete
+      - name: Set up Xcode select
+        run: sudo xcode-select -switch /Applications/Xcode.app
 
-      - name: Find Xcode project
-        id: proj
+      - name: Clean & Archive
         run: |
-          proj=$(find . -maxdepth 2 -name "*.xcodeproj" | grep -v "._")
-          echo "project=$proj" >> $GITHUB_OUTPUT
-          echo "Detected Xcode project: $proj"
-
-      - name: Ensure Xcode scheme is shared
-        run: |
-          mkdir -p "${{ steps.proj.outputs.project }}/xcshareddata/xcschemes"
-          scheme_file=$(find "${{ steps.proj.outputs.project }}" -path "*/xcuserdata/*/xcschemes/*.xcscheme" | head -1)
-          if [ -n "$scheme_file" ]; then
-            cp "$scheme_file" "${{ steps.proj.outputs.project }}/xcshareddata/xcschemes/"
-          fi
-          ls "${{ steps.proj.outputs.project }}/xcshareddata/xcschemes"
-
-      - name: Build archive (Unsigned)
-        run: |
-          xcodebuild archive \
-            -project "${{ steps.proj.outputs.project }}" \
+          xcodebuild \
+            -project PokeWalker.xcodeproj \
             -scheme PokeWalker \
-            -archivePath build/PokeWalker.xcarchive \
-            CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM="" \
-            CODE_SIGN_IDENTITY=""
+            -configuration Release \
+            -archivePath $PWD/build/PokeWalker.xcarchive \
+            clean archive \
+            SKIP_INSTALL=NO \
+            BUILD_LIBRARY_FOR_DISTRIBUTION=YES
 
-      - name: Upload archive artifact
-        uses: actions/upload-artifact@v4
+      - name: Create ExportOptions.plist
+        run: |
+          cat <<EOF > ExportOptions.plist
+          {
+            "method": "development",
+            "compileBitcode": false,
+            "destination": "export",
+            "signingStyle": "automatic",
+            "teamID": "YOUR_TEAM_ID",
+            "stripSwiftSymbols": true
+          }
+          EOF
+
+      - name: Export IPA
+        run: |
+          xcodebuild \
+            -exportArchive \
+            -archivePath build/PokeWalker.xcarchive \
+            -exportPath build/export \
+            -exportOptionsPlist ExportOptions.plist
+
+      - name: Zip the IPA
+        run: |
+          cd build/export
+          zip -r PokeWalker.zip .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
         with:
-          name: PokeWalker-xcarchive
-          path: build/PokeWalker.xcarchive
+          name: PokeWalker-IPA
+          path: build/export/PokeWalker.zip
